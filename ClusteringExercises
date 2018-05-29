@@ -1,0 +1,165 @@
+Hands on Exercises
+================
+
+Package and Dataset
+-------------------
+
+First you will install the R package `ropls` by pasting the following into the R console:
+
+``` r
+source("https://bioconductor.org/biocLite.R")
+biocLite("ropls")
+```
+
+We will use the dataset `arcene` that comprises 100 observations and 10,000 explanatory variables (*p* ≫ *n* ) in order to diagnose cancer from serum samples.
+
+The cancer / no-cancer labels (coded as -1 / 1) are stored in a different file, so we can directly append it to the full data set and later use the formula syntax for training the models
+
+``` r
+arcene <- read.table("http://archive.ics.uci.edu/ml/machine-learning-databases/arcene/ARCENE/arcene_train.data", 
+                     sep = " ", colClasses = c(rep("numeric", 10000), "NULL"))
+
+# Add the labels as an additional column
+arcene$class <- factor(scan("https://archive.ics.uci.edu/ml/machine-learning-databases/arcene/ARCENE/arcene_train.labels", sep = "\t"))
+```
+
+Take a look at the dataset
+
+``` r
+dim(arcene)
+table(arcene$class)
+```
+
+Create a new data.frame containing only the MS variables
+
+``` r
+dta<-arcene[,-10001]
+```
+
+PCA
+---
+
+To perform a PCA we first need to remove variabels (columns) containing only zeros
+
+``` r
+wh <- which(apply(dta==0, 2, all))
+dta2 <- dta[,-wh]
+```
+
+### PCA with SVD (`prcomp`)
+
+``` r
+ir.pca <- prcomp(dta2,
+                 center = TRUE, scale. = TRUE) 
+plot(ir.pca)
+summary(ir.pca)
+```
+
+Make a *score plot* of the PCA
+
+``` r
+plot(ir.pca$x[,1:2], col=arcene$class)
+```
+
+Do the samples cluster according to the class variable?
+
+#### If you have time (save this for later)
+
+If you want to try another way of making the score plot you can try the package `ggfortify` (needs to be installed):
+
+<!--
+#library(devtools)
+#install_github("ggbiplot", "vqv")
+ 
+library(ggbiplot)
+g <- ggbiplot(ir.pca, obs.scale = 1, var.scale = 1, 
+              groups = factor(arcene$class), ellipse = TRUE, 
+              circle = TRUE)
+
+g <- g + scale_color_discrete(name = '')
+g <- g + theme(legend.direction = 'horizontal', 
+               legend.position = 'top')
+print(g)
+#biplot(ir.pca, var.axes = FALSE)
+
+-->
+``` r
+library(ggfortify)
+
+autoplot(prcomp(dta2), data = arcene, colour = 'class', 
+         loadings = FALSE, loadings.label = FALSE)
+```
+
+### PCA with NIPALS (`ropls`)
+
+First load the `ropls` package with:
+
+``` r
+library(ropls)
+```
+
+Then perform a PCA of the data using the `opls()` function:
+
+``` r
+ dta.pca <- opls(dta)
+```
+
+Make plots of the PCA:
+
+``` r
+classFc <- arcene$class
+plot(dta.pca, typeVc = "x-score",
+parAsColFcVn = classFc, parEllipsesL = TRUE)
+```
+
+PLS-DA
+------
+
+Now we will perform a PLS discriminant analysis using the same dataset, this is done by adding the `classFc` variable defined above to the `opls()` function:
+
+``` r
+dta.plsda <- opls(dta2, classFc)
+```
+
+OPLS-DA
+-------
+
+To perform a OPLS-DA you need to add the parameters `predI = 1, orthoI = NA`
+
+``` r
+dta.oplsda <- opls(dta2, classFc,
+                  predI = 1, orthoI = NA)
+```
+
+### VIP plot
+
+To make a VIP plot we obtain the VIP values using the function `getVipVn()`, then make a barplot of the sorted VIP values:
+
+``` r
+barplot(sort(getVipVn(dta.plsda),decreasing = TRUE)[1:50], las=2, cex.names = 0.4)
+```
+
+PLS
+---
+
+If you have a continuous response variable instead of a class variable, you can also do a PLS analysis. Here we need to use another dataset.
+
+``` r
+data(sacurine)
+names(sacurine)
+```
+
+    ## [1] "dataMatrix"       "sampleMetadata"   "variableMetadata"
+
+``` r
+attach(sacurine)
+
+
+sacurine.pls <- opls(dataMatrix, sampleMetadata$bmi)
+```
+
+    ## PLS
+    ## 183 samples x 109 variables and 1 response
+    ## standard scaling of predictors and response(s)
+    ##       R2X(cum) R2Y(cum) Q2(cum) RMSEE pre ort pR2Y  pQ2
+    ## Total    0.194    0.401   0.234  2.43   2   0 0.05 0.05
